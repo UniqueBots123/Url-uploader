@@ -1,6 +1,6 @@
 {
   "name": "URL Uploader 🚀",
-  "description": "Telegram's best Open Source Url Uploader Bot. Create your Fork now.",
+  "description": "Telegram's best Url Uploader Bot.",
   "logo": "https://te.legra.ph/file/82c925ccc38606d837831.jpg",
   "keywords": [
     "telegram",
@@ -13,8 +13,8 @@
     "remote",
     "uploader"
   ],
-  "website": "https://t.me/LegendSources",
-  "repository": "https://github.com/venomxdevil/URLUPLOADER",
+  "website": "https://t.me/nothing_updates",
+  "repository": "https://github.com",
   "env": {
     "WEBHOOK": {
       "description": "Setting this to ANYTHING will enable webhooks when in env mode",
@@ -46,7 +46,7 @@
     },
     "OWNER_ID": {
       "description": "Your Telegram ID For Broadcast",
-      "value": "1834908260"
+      "value": "7766469355"
     },
     "BOT_USERNAME": {
       "description": "Your Bot Username Without @",
