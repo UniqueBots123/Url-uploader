@@ -72,4 +72,4 @@ class Database:
         return user or None
 
 
-db = Database(Config.DATABASE_URL, "LegendSources")
+db = Database(Config.DATABASE_URL, "NothingBots")
