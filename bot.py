@@ -1,82 +1,148 @@
-import logging
 import os
+import time
+import math
+import logging
 import asyncio
-from datetime import datetime, timedelta
-from plugins.config import Config
-from pyrogram import Client as Ntbots
-from pyrogram import filters
-logging.getLogger("pyrogram").setLevel(logging.WARNING)
+import urllib.request
+from telethon import TelegramClient, events, Button
+from telethon.tl.types import DocumentAttributeVideo
+from config import Config
+from urllib.parse import urlparse
 
-# Initialize the logger
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Dictionary to track user states and cooldowns
-user_states = {}
+bot = TelegramClient('bot', Config.API_ID, Config.API_HASH).start(bot_token=Config.BOT_TOKEN)
 
-async def start_task(user_id, task_duration):
-    """Function to start a task and manage cooldown."""
-    # Check if user is already running a task
-    if user_id in user_states:
-        user_state = user_states[user_id]
-        if user_state["state"] == "running":
-            return "Sorry dude😎\nYou can run only one task at a time"
-        elif user_state["state"] == "cooldown":
-            remaining_time = user_state["cooldown_until"] - datetime.now()
-            if remaining_time.total_seconds() > 0:
-                return "👆 See This Message And don't disturb me again 😏"
+# Progress bar
+async def progress(current, total, event, start, type_of_ps):
+    now = time.time()
+    diff = now - start
+    if round(diff % 10.00) == 0 or current == total:
+        percentage = current * 100 / total
+        speed = current / diff
+        elapsed_time = round(diff) * 1000
+        time_to_completion = round((total - current) / speed) * 1000
+        estimated_total_time = elapsed_time + time_to_completion
 
-    # Mark user as running a task
-    user_states[user_id] = {"state": "running"}
-    await asyncio.sleep(task_duration)  # Simulate task execution
+        progress_str = "**Downloading**: {0}%\n".format(
+            round(percentage, 2))
 
-    # Start cooldown timer
-    cooldown_time = timedelta(seconds=task_duration)  # Cooldown = task duration
-    cooldown_until = datetime.now() + cooldown_time
-    user_states[user_id] = {"state": "cooldown", "cooldown_until": cooldown_until}
+        tmp = progress_str + \
+            "**Done**: {0} of {1}\n**Speed**: {2}/s\n**ETA**: {3}\n".format(
+                humanbytes(current),
+                humanbytes(total),
+                humanbytes(speed),
+                time_formatter(estimated_total_time)
+            )
+        await event.edit(text=f"`{type_of_ps}`\n\n{tmp}")
 
-    # Notify user of task completion
-    return "Task completed! Timer started."
+def humanbytes(size):
+    if not size:
+        return ""
+    power = 2**10
+    n = 0
+    Dic_powerN = {0: ' ', 1: 'K', 2: 'M', 3: 'G', 4: 'T'}
+    while size > power:
+        size /= power
+        n += 1
+    return str(round(size, 2)) + " " + Dic_powerN[n] + 'B'
 
-async def check_cooldown(user_id):
-    """Function to check if user can send a new task."""
-    if user_id in user_states and user_states[user_id]["state"] == "cooldown":
-        remaining_time = user_states[user_id]["cooldown_until"] - datetime.now()
-        if remaining_time.total_seconds() > 0:
-            await asyncio.sleep(remaining_time.total_seconds())  # Wait for cooldown
-        # Notify user that they can send a new task
-        user_states.pop(user_id)  # Remove user from state tracking
-        return "You Can Send Me New Task Now"
+def time_formatter(milliseconds: int) -> str:
+    seconds, milliseconds = divmod(int(milliseconds), 1000)
+    minutes, seconds = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    days, hours = divmod(hours, 24)
+    tmp = ((str(days) + "d, ") if days else "") + \
+        ((str(hours) + "h, ") if hours else "") + \
+        ((str(minutes) + "m, ") if minutes else "") + \
+        ((str(seconds) + "s, ") if seconds else "")
+    return tmp[:-2]
 
-# Create bot instance
-if __name__ == "__main__" :
+@bot.on(events.NewMessage(pattern='/start'))
+async def start(event):
+    await event.reply(
+        f"Hi {event.sender.first_name}, I am URL Uploader Bot.\n\nSend me any direct download link, I'll upload it to telegram as file/video.",
+        buttons=[
+            [Button.url("Source Code", url="https://github.com/UniqueBots123/Url-uploader")],
+            [Button.url("Support Group", url="https://t.me/uniquebots")]
+        ]
+    )
 
-    if not os.path.isdir(Config.DOWNLOAD_LOCATION):
-        os.makedirs(Config.DOWNLOAD_LOCATION)
+@bot.on(events.NewMessage(pattern='http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'))
+async def upload(event):
+    url = event.text
+    
+    if "|" in url:
+        url, filename = url.split("|")
+        url = url.strip()
+        filename = filename.strip()
+    else:
+        filename = os.path.basename(urlparse(url).path) or 'file'
 
-    plugins = dict(root="plugins")
-    Ntbots = Ntbots(
-        "URL UPLOADER BOT",
-        bot_token=Config.BOT_TOKEN,
-        api_id=Config.API_ID,
-        api_hash=Config.API_HASH,
-        plugins=plugins)
+    try:
+        status = await event.reply("**Downloading...**")
+        start = time.time()
+        
+        request = urllib.request.Request(
+            url,
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        )
+        
+        with urllib.request.urlopen(request) as response:
+            total_size = int(response.headers["Content-Length"])
+            block_size = 8192
+            downloaded_size = 0
 
-    print("🎊 I AM ALIVE 🎊  • Support @nothing_updates")
+            with open(filename, 'wb') as f:
+                while True:
+                    chunk = response.read(block_size)
+                    if not chunk:
+                        break
+                    downloaded_size += len(chunk)
+                    f.write(chunk)
+                    await progress(
+                        downloaded_size,
+                        total_size,
+                        status,
+                        start,
+                        "Downloading..."
+                    )
 
-    # Example of handling a command to start a task
-    @Ntbots.on_message(filters.command("start"))
-    async def handle_start(client, message):
-        user_id = message.from_user.id
-        response = await start_task(user_id, 10)  # Task duration is 10 seconds
-        await message.reply(response)
+        await status.edit("**Uploading to Telegram...**")
+        start = time.time()
 
-    # Example of handling a command to check cooldown
-    @Ntbots.on_message(filters.command("status"))
-    async def handle_status(client, message):
-        user_id = message.from_user.id
-        response = await check_cooldown(user_id)
-        await message.reply(response)
+        if filename.lower().endswith(('.mp4', '.mkv', '.avi')):
+            metadata = DocumentAttributeVideo(
+                duration=0,
+                w=1280,
+                h=720,
+                supports_streaming=True
+            )
+            await bot.send_file(
+                event.chat_id,
+                filename,
+                attributes=[metadata],
+                progress_callback=lambda d, t: asyncio.get_event_loop().create_task(
+                    progress(d, t, status, start, "Uploading...")
+                )
+            )
+        else:
+            await bot.send_file(
+                event.chat_id,
+                filename,
+                progress_callback=lambda d, t: asyncio.get_event_loop().create_task(
+                    progress(d, t, status, start, "Uploading...")
+                )
+            )
 
-    Ntbots.run()
+        await status.delete()
+        os.remove(filename)
+
+    except Exception as e:
+        await status.edit(f"**Error:** {str(e)}")
+        if os.path.exists(filename):
+            os.remove(filename)
+
+print("Bot Started...")
+bot.run_until_disconnected()
