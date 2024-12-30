@@ -5,6 +5,7 @@ numpy
 Pillow
 pyrofork
 requests
+telethon
 tgcrypto
 yt-dlp
 olefile
