@@ -6,7 +6,7 @@ import asyncio
 import urllib.request
 from telethon import TelegramClient, events, Button
 from telethon.tl.types import DocumentAttributeVideo
-from config import Config
+from plugins.config import Config
 from urllib.parse import urlparse
 
 logging.basicConfig(level=logging.INFO)
